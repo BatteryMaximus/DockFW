@@ -13,27 +13,27 @@
 #define EEPROM_WC 5
 #define CHARGE 6
 #define EN_CHARGE 14
+#define LED0 16
+#define LED1 17
+#define LED2 18
+#define LED3 19
+
 
 int initSystems(){
 	printf("Beginning initialization....\n");
 	i2c_init(i2c1, 100*1000);
 	gpio_set_function(SDA_PIN, GPIO_FUNC_I2C); //SDA
 	gpio_set_function(SCL_PIN, GPIO_FUNC_I2C); //SCL
-	gpio_pull_up(SDA_PIN);
-	gpio_pull_up(SCL_PIN);
 	sleep_ms(100);
-	
 	setMCP4725Voltage(i2c1, 400, false);
-	// Initialize GPIO Pins
-	gpio_init(CHARGE);
-	gpio_init(EEPROM_WC);
-	gpio_init(EN_CHARGE);
+	
+	int outputPins[] = {EEPROM_WC, CHARGE, EN_CHARGE, LED0, LED1, LED2, LED3};
+	int outputPinCount = sizeof(outputPins) / sizeof(outputPins[0]);
+	for (int i = 0; i < outputPinCount; i++){
+		gpio_init(outputPins[i]);
+		gpio_set_dir(outputPins[i], GPIO_OUT);
+	}
 
-
-	//Set GPIO Pin Direction
-	gpio_set_dir(CHARGE, GPIO_OUT);
-	gpio_set_dir(EEPROM_WC, GPIO_OUT);
-	gpio_set_dir(EN_CHARGE, GPIO_OUT);
 	printf("Finished initialization....\n");
 	return 0;
 }
@@ -107,6 +107,7 @@ int charToInt(char c){
 
 uint16_t processCommand(char *command, int commandLength){
 	uint16_t commandNumber = charToInt(command[1]) << 12 | charToInt(command[2]) << 8 | charToInt(command[3]) << 4 | charToInt(command[4]);
+	printf("COMMAND NUMBER: %d \n", commandNumber);
 	uint16_t subCommand = charToInt(command[6]) << 12 | charToInt(command[7]) << 8 | charToInt(command[8]) << 4 | charToInt(command[9]);
 	float adcMaxVoltage = 4.096;
 	float shuntResistance = 0.003;
@@ -117,15 +118,23 @@ uint16_t processCommand(char *command, int commandLength){
 		return 0;
 	}else{
 		switch (commandNumber) {
-			case 1: // Start Charging 
+			case 1: // Start Charging Power Supply
 				printf("Starting Charging... \n");
-				gpio_put(CHARGE, 1);	
+				gpio_put(LED0, 1);
 				gpio_put(EN_CHARGE, 1);
 				break;
-			case 2: // Stop Charging
+			case 2: // Stop Charging Power Supply
 				printf("Stopping Charging ... \n");
-				gpio_put(CHARGE, 0);
+				gpio_put(LED0, 0);
 				gpio_put(EN_CHARGE, 0);
+				break;
+			case 3: // Enable Charging Mosfet
+				gpio_put(LED1, 1);
+				gpio_put(CHARGE, 1);
+				break;
+			case 4:
+				gpio_put(LED1, 0);
+				gpio_put(CHARGE, 0);
 				break;
 			case 21: // get battery voltage
 				float batVoltage = calculateBatVoltage(values[0], adcMaxVoltage, 10, 100);
@@ -149,8 +158,10 @@ uint16_t processCommand(char *command, int commandLength){
 				printf("%04X\n", serialNumber);
 				break;
 			case 11: // Set device Serial Number
+				gpio_put(EEPROM_WC, 0);
 				printf("Will assign %04X to this device. \n", subCommand);
 				writeDeviceSerial(subCommand, i2c1);
+				gpio_put(EEPROM_WC, 1);
 				break;
 			default:
 				printf("No command recognized \n");
@@ -174,23 +185,33 @@ int processCommandChar(char *command, int commandLength, char newChar){
 	}
 }
 
+int ledStartUp(){
+	int leds[] = {LED0, LED1, LED2, LED3};
+	for(int i=0; i < 4; i++){
+		gpio_put(leds[i], 1);
+		sleep_ms(200);
+		gpio_put(leds[i], 0);
+	}
+}
+
 
 int main(){
 	uint16_t serialNumber = 0x0000;
 	int commandLength = 200;
 	char command[commandLength] = {};
-	int maxCycles = 100000000;	
+	int maxCycles = 10000000;	
 	int currentCycle = 0;
 	stdio_init_all();
 	initSystems();
 	sleep_ms(1000);
 	gpio_put(CHARGE, 0);
-	gpio_put(EEPROM_WC, 0);
+	gpio_put(EEPROM_WC, 1);
 	gpio_put(EN_CHARGE, 0);
+	gpio_put(LED0, 1);
 	clearCharString(command, commandLength); 
-	serialNumber =  readDeviceSerial(i2c1);
-
-	
+	ledStartUp();
+	//serialNumber =  readDeviceSerial(i2c1);
+	printf("Starting Main Loop \n");	
 	while(1){
 		if(uart_is_readable(uart0)){
 			char c = uart_getc(uart0);
