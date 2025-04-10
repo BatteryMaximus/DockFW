@@ -25,7 +25,7 @@ int initSystems(){
 	gpio_set_function(SDA_PIN, GPIO_FUNC_I2C); //SDA
 	gpio_set_function(SCL_PIN, GPIO_FUNC_I2C); //SCL
 	sleep_ms(100);
-	setMCP4725Voltage(i2c1, 400, false);
+	setMCP4725Voltage(i2c1, 1000, false);
 	
 	int outputPins[] = {EEPROM_WC, CHARGE, EN_CHARGE, LED0, LED1, LED2, LED3};
 	int outputPinCount = sizeof(outputPins) / sizeof(outputPins[0]);
@@ -61,7 +61,6 @@ float calculateTemperature(float analogValue, float ntcResistance, float betaNum
 }
 
 float calculateShuntCurrent(float shuntResistance, float analogValue, float analogMaxVoltage){
-	analogValue = analogValue - 500;
 	analogValue = analogValue / 100;
 	float percentage = analogValue / (float)32768;
 	float voltage = percentage * analogMaxVoltage;
@@ -119,20 +118,22 @@ uint16_t processCommand(char *command, int commandLength){
 	}else{
 		switch (commandNumber) {
 			case 1: // Start Charging Power Supply
-				printf("Starting Charging... \n");
+				printf("Starting Charge Power Supply... \n");
 				gpio_put(LED0, 1);
 				gpio_put(EN_CHARGE, 1);
 				break;
 			case 2: // Stop Charging Power Supply
-				printf("Stopping Charging ... \n");
+				printf("Stopping Charge Power Supply... \n");
 				gpio_put(LED0, 0);
 				gpio_put(EN_CHARGE, 0);
 				break;
 			case 3: // Enable Charging Mosfet
+				printf("Enabling Charge FET... \n");
 				gpio_put(LED1, 1);
 				gpio_put(CHARGE, 1);
 				break;
 			case 4:
+				printf("Disabling Charge FET... \n");
 				gpio_put(LED1, 0);
 				gpio_put(CHARGE, 0);
 				break;
@@ -149,6 +150,7 @@ uint16_t processCommand(char *command, int commandLength){
 				printf("%.2f\n", temperature);
 				break;
 			case 33: // set max current limit
+				printf("Setting Max Current To %d/4096 \n", subCommand);
 				setMCP4725Voltage(i2c1, subCommand, false);
 				printf("Max Current Has been set \n");
 				break;
