@@ -12,11 +12,14 @@
 #define SCL_PIN 3
 #define EEPROM_WC 5
 #define CHARGE 6
-#define EN_CHARGE 14
+#define EN_CHARGE_PWR 14
 #define LED0 16
 #define LED1 17
 #define LED2 18
 #define LED3 19
+
+
+
 
 
 int initSystems(){
@@ -27,7 +30,7 @@ int initSystems(){
 	sleep_ms(100);
 	setMCP4725Voltage(i2c1, 1000, false);
 	
-	int outputPins[] = {EEPROM_WC, CHARGE, EN_CHARGE, LED0, LED1, LED2, LED3};
+	int outputPins[] = {EEPROM_WC, CHARGE, EN_CHARGE_PWR, LED0, LED1, LED2, LED3};
 	int outputPinCount = sizeof(outputPins) / sizeof(outputPins[0]);
 	for (int i = 0; i < outputPinCount; i++){
 		gpio_init(outputPins[i]);
@@ -68,7 +71,7 @@ float calculateShuntCurrent(float shuntResistance, float analogValue, float anal
 	return shuntCurrent;
 }
 
-int checkBatHealth(){
+int checkBatHealth(bool printStats){
 	uint16_t serialNumber = 0x0000;
 	serialNumber = readDeviceSerial(i2c1);
 	float adcMaxVoltage = 4.096;
@@ -78,12 +81,14 @@ int checkBatHealth(){
 	float batVoltage = calculateBatVoltage(values[0], adcMaxVoltage, 10, 100);
 	float temperature = calculateTemperature((float)values[1], (float)50000, (float)3800);
 	float chargeCurrent = calculateShuntCurrent(shuntResistance, (float)values[2], adcMaxVoltage);
-	if (temperature > 50.0){
+	if (temperature > 50.0 && serialNumber > 0){
 		gpio_put(CHARGE, 0);
-		gpio_put(EN_CHARGE, 0);
+		gpio_put(EN_CHARGE_PWR, 0);
 		printf("Disabling charging, temperature too high \n");
 	}
-	printf("Serial: %04X: Bat Voltage: %.2fv, Temperature: %.2fC, Charge Current: %.2fA\n", serialNumber, batVoltage, temperature, chargeCurrent);
+	if(printStats){
+		printf("Serial: %04X: Bat Voltage: %.2fv, Temperature: %.2fC, Charge Current: %.2fA\n", serialNumber, batVoltage, temperature, chargeCurrent);
+	}
 }
 
 int clearCharString(char *arr, int length){
@@ -120,12 +125,12 @@ uint16_t processCommand(char *command, int commandLength){
 			case 1: // Start Charging Power Supply
 				printf("Starting Charge Power Supply... \n");
 				gpio_put(LED0, 1);
-				gpio_put(EN_CHARGE, 1);
+				gpio_put(EN_CHARGE_PWR, 1);
 				break;
 			case 2: // Stop Charging Power Supply
 				printf("Stopping Charge Power Supply... \n");
 				gpio_put(LED0, 0);
-				gpio_put(EN_CHARGE, 0);
+				gpio_put(EN_CHARGE_PWR, 0);
 				break;
 			case 3: // Enable Charging Mosfet
 				printf("Enabling Charge FET... \n");
@@ -164,6 +169,9 @@ uint16_t processCommand(char *command, int commandLength){
 				printf("Will assign %04X to this device. \n", subCommand);
 				writeDeviceSerial(subCommand, i2c1);
 				gpio_put(EEPROM_WC, 1);
+				break;
+			case 12: // Print out stats
+				checkBatHealth(true);	
 				break;
 			default:
 				printf("No command recognized \n");
@@ -208,7 +216,7 @@ int main(){
 	sleep_ms(1000);
 	gpio_put(CHARGE, 0);
 	gpio_put(EEPROM_WC, 1);
-	gpio_put(EN_CHARGE, 0);
+	gpio_put(EN_CHARGE_PWR, 0);
 	gpio_put(LED0, 1);
 	clearCharString(command, commandLength); 
 	ledStartUp();
@@ -220,7 +228,7 @@ int main(){
 			processCommandChar(command, commandLength, c);
 			}		
 		if(currentCycle >= maxCycles){
-			checkBatHealth();
+			checkBatHealth(false);
 			currentCycle = 0;
 		}
 		currentCycle += 1;
