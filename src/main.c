@@ -111,7 +111,6 @@ int charToInt(char c){
 
 uint16_t processCommand(char *command, int commandLength){
 	uint16_t commandNumber = charToInt(command[1]) << 12 | charToInt(command[2]) << 8 | charToInt(command[3]) << 4 | charToInt(command[4]);
-	printf("COMMAND NUMBER: %d \n", commandNumber);
 	uint16_t subCommand = charToInt(command[6]) << 12 | charToInt(command[7]) << 8 | charToInt(command[8]) << 4 | charToInt(command[9]);
 	float adcMaxVoltage = 4.096;
 	float shuntResistance = 0.003;
@@ -208,7 +207,7 @@ int ledStartUp(){
 int main(){
 	uint16_t serialNumber = 0x0000;
 	int commandLength = 200;
-	char command[commandLength] = {};
+	char command[200] = {};
 	int maxCycles = 10000000;	
 	int currentCycle = 0;
 	stdio_init_all();
